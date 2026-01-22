@@ -1,0 +1,78 @@
+@startuml Архитектура_УправлениеСкотом_C4L4_service_ai_2
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 L4: service_ai_2 - Классовая диаграмма FastAPI
+
+' Внешние интерфейсы (адаптеры)
+class ExternalAPI {
+  +gRPC YoloClient
+  +MinIO S3Client  
+  +TimescaleDB Repository
+}
+
+' Основное FastAPI приложение
+class AIServiceApp {
+  +POST /inference/start()
+  +POST /inference/status/{task_id}()
+  +POST /frames/upload()
+}
+
+' Бизнес-логика (оркестратор)
+class InferenceManager {
+  -yolo_client: YoloClient
+  -s3_manager: S3Manager  
+  -frame_repo: FrameRepository
+  +async process_video_stream(stream: VideoStream): VideoFrames
+  +async submit_inference_task(video_id: str): TaskId
+  +get_task_status(task_id: str): TaskStatus
+}
+
+' Адаптеры инфраструктуры
+class YoloClient {
+  -grpc_channel: grpc.Channel
+  +async detect_objects(frame: Frame): DetectionResult
+}
+
+class S3Manager {
+  -s3_client: MinioClient
+  +async upload_video(video_id: str, frames: bytes): UploadResult
+}
+
+class FrameRepository {
+  -db: TimescaleDB
+  +async save_frames(frames: List[Frame]): BatchResult
+}
+
+' Вспомогательные классы
+class VideoProcessor {
+  +extract_keyframes(video_path: str): List[Frame]
+  +detect_anomalies(frames: List[Frame]): List[Anomaly]
+}
+
+class TaskTracker {
+  +track_task(task_id: str): TaskStatus
+  +update_task_status(task_id: str, status: str)
+}
+
+' Связи (по твоему синтаксису)
+AIServiceApp "1" --> "1" InferenceManager : использует
+InferenceManager "1" --> "1" YoloClient : вызывает
+InferenceManager "1" --> "1" S3Manager : сохраняет
+InferenceManager "1" --> "1" FrameRepository : сохраняет
+InferenceManager "1" --> "1" VideoProcessor : обрабатывает
+InferenceManager "1" --> "1" TaskTracker : отслеживает
+
+YoloClient ..> "gRPC" ExternalAPI : использует
+S3Manager ..> "MinIO" ExternalAPI : использует  
+FrameRepository ..> "TimescaleDB" ExternalAPI : использует
+
+note right of InferenceManager
+  Главный оркестратор ML pipeline:
+  1. Принимает VideoStream от Stream Router
+  2. Извлекает ключевые кадры  
+  3. Отправляет в YOLO (gRPC)
+  4. Сохраняет результаты в S3/DB
+  5. Отслеживает статус задачи
+end note
+
+@enduml

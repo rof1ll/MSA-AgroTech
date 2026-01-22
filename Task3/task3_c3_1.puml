@@ -1,0 +1,55 @@
+@startuml Архитектура_УправлениеСкотом_C4L2_v8
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+Person(администратор, "Администратор", "Метрики")
+
+System_Boundary(цифр, "Цифровая платформа") {
+    System_Boundary(агро, "АгроТех Х - Управление скотом") {
+        Container(дашборд, "UI Дашборд ферм", "React 18", "Мониторинг всех ферм АгроТех")
+        
+        Container(api, "Сервис бизнес-логики", "", "Управление фермами/алертами"){
+            Component(api_gateway, "API Gateway", "FastAPI")
+            Component(service_conf, "Сервис конфигураций")
+            Component(service_ai_2, "Сервис работы с ИИ агентами", "FastAPI")
+            Component(service_alert, "Сервис работы с инцидентами", "FastAPI")
+        }
+        Container(service_ai, "Интеграционный слой", "EMQX/NATS", "Маршрутизация видеопотоков от Edge‑агентов") {
+            Component(mqtt_broker, "MQTT Handler", "")
+            Component(stream_router, "Stream Router to API", "")
+        }
+        Container(yolo, "ИИ Агент", "Local YOLOv26", "Детекция свиней/аномалий")
+        ContainerDb(videoDB, "База фреймов для обучения ИИ", "TimescaleDB", "Кадры + метаданные")
+        ContainerDb(S3, "База видео", "MinIO")
+        Container(graph, "GraphQL", "FastAPI")
+    }
+    Container(keycloak, "Keycloak", "JWT")
+    Container(брокер, "Брокер сообщений", "Kafka")
+    System_Ext(prometheus, "Prometheus", "Сбор метрик")
+}
+Container(loki, "Loki", "Logs", "Сбор логов сервисов АгроТех Х")
+System_Ext(edge, "Edge-Агенты", "Видео/сенсоры")
+
+Rel(service_ai_2, prometheus, "Метрики")
+Rel(service_alert, prometheus, "Метрики")
+Rel(api_gateway, prometheus, "")
+Rel(api_gateway, loki, "Логи/трейсы", "HTTP")
+Rel(service_alert, loki, "Логи/трейсы", "HTTP")
+Rel(service_ai_2, loki, "Логи/трейсы", "HTTP")
+Rel(service_conf, loki, "Логи/трейсы", "HTTP")
+Rel(брокер, service_alert, "Передача событий алертов")
+Rel(api_gateway, service_alert, "")
+Rel(дашборд, graph, "")
+Rel(graph, api_gateway, "API", "HTTP/2")
+Rel(api_gateway, service_conf, "")
+Rel(api_gateway, keycloak, "")
+Rel(api_gateway, service_ai_2, "")
+Rel(администратор, graph, "Конфигурация")
+Rel(service_ai_2, yolo, "Inference", "gRPC")
+Rel(service_ai_2, S3, "Необработанные видео")
+Rel(edge, mqtt_broker, "Видео/MQTT/RTSP", "MQTT over TLS")
+Rel(mqtt_broker, stream_router, "События/кадры")
+Rel(stream_router, api_gateway, "Видеопотоки/события", "gRPC/HTTP")
+Rel(stream_router, брокер, "Телеметрия", "Kafka")
+Rel(yolo, videoDB, "Обработанные кадры", "SQL")
+
+@enduml
